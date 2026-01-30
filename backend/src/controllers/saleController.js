@@ -5,8 +5,8 @@ import { initiateStkPush } from '../services/mpesaService.js';
 export const getAvailableProducts = async (req, res) => {
   try {
     const { branchId } = req.params;
-    const products = await Product.find();
-    
+    const products = await Product.findAll();
+
     res.json({
       success: true,
       data: { products: products || [] }
@@ -50,7 +50,7 @@ export const initiatePayment = async (req, res) => {
 
     // Get product
     console.log('Looking for product:', productId);
-    const product = await Product.findById(productId);
+    const product = await Product.findByPk(productId);
 
     if (!product) {
       console.log('❌ FAIL: Product not found');
@@ -75,23 +75,18 @@ export const initiatePayment = async (req, res) => {
     console.log('  - totalAmount:', totalAmount);
     console.log('  - phoneNumber:', phoneNumber);
 
-    // Create and save
-    const saleData = {
-      customer: userId,
-      product: productId,
-      branch: branchId,
+    // Create sale using Sequelize
+    console.log('Creating Sale object...');
+    const savedSale = await Sale.create({
+      customerId: userId,
+      productId: productId,
+      branchId: branchId,
       quantity: quantity,
       unitPrice: unitPrice,
       totalAmount: totalAmount,
-      phoneNumber: phoneNumber,
-      paymentStatus: 'pending'
-    };
-
-    console.log('Creating Sale object...');
-    const sale = new Sale(saleData);
-
-    console.log('Saving to database...');
-    const savedSale = await sale.save();
+      paymentStatus: 'pending',
+      paymentMethod: 'mpesa'
+    });
 
     console.log('✅ SUCCESS: Sale created:', savedSale.id);
 
@@ -108,14 +103,14 @@ export const initiatePayment = async (req, res) => {
     console.error('\n❌ ERROR IN PAYMENT:');
     console.error('Message:', error.message);
     console.error('Type:', error.name);
-    
+
     if (error.errors) {
       console.error('Validation errors:');
-      Object.keys(error.errors).forEach(field => {
-        console.error(`  - ${field}:`, error.errors[field].message);
+      error.errors.forEach(err => {
+        console.error(`  - ${err.path}:`, err.message);
       });
     }
-    
+
     console.error('Stack:', error.stack);
 
     res.status(500).json({
@@ -137,7 +132,7 @@ export const confirmPayment = async (req, res) => {
       });
     }
 
-    const sale = await Sale.findById(saleId);
+    const sale = await Sale.findByPk(saleId);
     if (!sale) {
       return res.status(404).json({
         success: false,
@@ -146,7 +141,7 @@ export const confirmPayment = async (req, res) => {
     }
 
     sale.paymentStatus = 'completed';
-    sale.paymentDate = new Date();
+    sale.saleDate = new Date();
     await sale.save();
 
     res.json({
@@ -166,10 +161,14 @@ export const confirmPayment = async (req, res) => {
 export const getMyPurchases = async (req, res) => {
   try {
     const userId = req.user.id;
-    const sales = await Sale.find({ customer: userId })
-      .populate('product')
-      .populate('branch')
-      .sort({ createdAt: -1 });
+    const sales = await Sale.findAll({
+      where: { customerId: userId },
+      include: [
+        { model: Product, as: 'product' },
+        { model: Branch, as: 'branch' }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
 
     res.json({
       success: true,

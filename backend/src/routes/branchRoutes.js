@@ -1,5 +1,5 @@
 import express from 'express';
-import Branch from '../models/Branch.js';
+import { Branch } from '../models/index.js';
 
 const router = express.Router();
 
@@ -8,7 +8,9 @@ const router = express.Router();
 // @access  Public
 router.get('/', async (req, res, next) => {
   try {
-    const branches = await Branch.find().select('_id name location');
+    const branches = await Branch.findAll({
+      attributes: ['id', 'name', 'location']
+    });
 
     res.status(200).json({
       success: true,
